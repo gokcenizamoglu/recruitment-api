@@ -1,0 +1,17 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+staticfiles/
+media/
+.idea/
+.vscode/
+.DS_Store
+.tmp/
+pytest-cache-files-*/
+schema.yml
