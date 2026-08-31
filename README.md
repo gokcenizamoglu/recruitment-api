@@ -54,13 +54,25 @@ SimpleJWT is configured with 15-minute access tokens, 7-day refresh tokens, rota
 ### Docker (recommended)
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/gokcenizamoglu/recruitment-api.git
 cd recruitment-api
 cp .env.example .env
 docker compose up --build
 ```
 
 The Compose project starts PostgreSQL 16 and a web container. The web container waits for the healthy database, runs migrations, collects static files, and starts Gunicorn on port 8000. Open `http://localhost:8000`; set `WEB_PORT` in `.env` if the host port is occupied.
+
+## Reviewer Quick Start
+
+```bash
+git clone https://github.com/gokcenizamoglu/recruitment-api.git
+cd recruitment-api
+cp .env.example .env
+docker compose up --build
+docker compose exec web python manage.py seed_demo
+```
+
+Open Swagger at `http://localhost:8000/api/docs/`, log in with a local demo Employer or Candidate account from the [Demo Data](#demo-data) section, and use the returned JWT with Swagger’s **Authorize** button. Optionally create a superuser and inspect `/admin/`.
 
 ### Local development
 
@@ -85,6 +97,8 @@ Django Unfold provides the internal admin at `/admin/`. Create a reviewer accoun
 
 ```bash
 python manage.py createsuperuser
+# Docker
+docker compose exec web python manage.py createsuperuser
 ```
 
 Staff can inspect users, jobs, skills, and applications. Soft-deleted jobs remain visible in admin through the all-records queryset, with deleted-state filters and a restore action. Job and Skill lists show related application/job counts where applicable. Application deletion is disabled to preserve recruitment history. The dashboard displays employer, candidate, job, active-job, application, status-distribution, and recent-application metrics. The REST API remains the primary interface.
@@ -181,7 +195,9 @@ python manage.py check
 python manage.py check --deploy
 ```
 
-The current suite covers authentication, JWT behavior, throttling, health, job ownership and soft deletion, filtering, applications and duplicate protection, admin behavior, and seed idempotency/reset safety. The latest local run contains 14 tests and 93% coverage. GitHub Actions runs Ruff, migration drift checks, Django checks, the deployment security check with production-like environment values, and pytest against PostgreSQL.
+The normal local `.env` keeps HTTP development convenient, so `check --deploy` may report expected warnings when run with those defaults. CI runs it with production-like values enabled, including `DEBUG=False`, a strong CI-only `SECRET_KEY`, appropriate hosts, HTTPS redirect, secure cookies, and HSTS.
+
+The current suite covers authentication, JWT refresh rotation/blacklisting, throttling, health, job ownership and soft deletion, filtering, applications and serializer/database duplicate protection, skill normalization, admin behavior, and seed idempotency/reset safety. The latest local run contains 23 tests with 94% coverage. GitHub Actions runs Ruff, migration drift checks, Django checks, the deployment security check with production-like environment values, and pytest against PostgreSQL.
 
 ## Design Decisions
 

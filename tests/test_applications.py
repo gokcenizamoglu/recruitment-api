@@ -1,6 +1,8 @@
 import pytest
+from django.db import IntegrityError, transaction
 from django.urls import reverse
 
+from applications.models import Application
 from tests.conftest import auth
 
 
@@ -45,3 +47,11 @@ def test_cannot_apply_inactive_or_deleted(api_client, candidate, job):
         reverse("application-list"), {"job": job.id}, format="json"
     )
     assert response.status_code == 400 and response.data["job"][0].code == "inactive_job"
+
+
+@pytest.mark.django_db
+def test_database_unique_constraint_rejects_duplicate_application(candidate, job):
+    Application.objects.create(candidate=candidate, job=job)
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            Application.objects.create(candidate=candidate, job=job)
