@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import User
@@ -347,8 +348,23 @@ class Command(BaseCommand):
             employer__email__in=EMPLOYERS,
             title__in=[spec[0] for spec in JOB_SPECS],
         )
-        Application.objects.filter(candidate__in=demo_users).delete()
-        Application.objects.filter(job__in=demo_jobs).delete()
-        demo_jobs.delete()
-        demo_users.delete()
+
+        # Applications are managed by their exact deterministic seed identity.
+        # A demo candidate may also have legitimate applications created outside
+        # this command, so filtering by candidate alone would be destructive.
+        managed_applications = Q()
+        employer_by_title = {title: employer_email for title, employer_email, *_ in JOB_SPECS}
+        for candidate_email, job_title, _status in APPLICATION_SPECS:
+            managed_applications |= Q(
+                candidate__email=candidate_email,
+                job__title=job_title,
+                job__employer__email=employer_by_title[job_title],
+            )
+        Application.objects.filter(managed_applications).delete()
+
+        # Keep a managed job/user if an external record still references it;
+        # PROTECT relationships preserve that history instead of forcing a
+        # broader delete during reset.
+        demo_jobs.filter(applications__isnull=True).delete()
+        demo_users.filter(applications__isnull=True, jobs__isnull=True).delete()
         self.stdout.write("Known demo records reset.")

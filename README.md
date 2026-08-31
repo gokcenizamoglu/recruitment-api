@@ -2,27 +2,67 @@
 
 ## Project Overview
 
-Recruitment API is a small Django + Django REST Framework service for employers publishing jobs and candidates applying to them. It is intentionally a focused assignment-sized backend with production-minded defaults and clear extension points.
+Recruitment API is a focused Django REST Framework backend for a two-sided recruitment flow. Employers publish and manage jobs; candidates browse jobs, apply once per job, and review their own applications. The REST API is the primary product surface. Django Unfold admin is an additional operational and reviewer convenience, not a replacement for the API.
 
 ## Features
 
-- Email-based custom users with employer/candidate roles
-- JWT authentication with rotating, blacklisted refresh tokens
-- Jobs, normalized skills, soft deletion, search, filters, ordering, and pagination
-- Candidate applications with duplicate protection at API and database levels
-- Employer-only application review and status updates
-- Health check, OpenAPI/Swagger, throttling, request IDs, environment-aware security
-- Repeatable demo seed command
+- Email-authenticated custom users with `EMPLOYER` and `CANDIDATE` roles
+- JWT access/refresh authentication with refresh rotation and blacklist support
+- Jobs, normalized reusable skills, search, filtering, ordering, pagination, and soft deletion
+- Candidate applications with serializer and database duplicate protection
+- Employer-only applicant visibility and application status updates
+- Health check, OpenAPI/Swagger, throttling, request IDs, CORS allow-list, and environment-based security settings
+- Deterministic, idempotent demo data via `seed_demo`
 
 ## Tech Stack
 
-Python 3.13, Django 5.2, Django REST Framework, PostgreSQL, SimpleJWT, django-filter, drf-spectacular, pytest, Ruff, Docker Compose, and GitHub Actions.
+Python 3.13, Django 5.2, Django REST Framework 3.16, PostgreSQL 16, SimpleJWT, django-filter, drf-spectacular, Django Unfold, WhiteNoise, pytest, Ruff, Docker Compose, and GitHub Actions. Dependency ranges are maintained in `requirements.txt` and `requirements-dev.txt`.
 
 ## Architecture and Data Model
 
-The project uses `accounts`, `jobs`, and `applications` Django apps. Views and serializers remain thin; business rules live close to the models/serializers and reusable permissions. `User` has email, role, and profile fields. `Job` belongs to an employer and has a many-to-many `Skill` relation. `Application` references a job and candidate and has a fixed `Status` TextChoices enum.
+The repository uses four focused Django areas: `accounts` (custom user and authentication), `jobs` (Job and Skill), `applications` (Application and workflow permissions), and `common` (health check, request-ID middleware, logging, and admin dashboard callback). Views and serializers are intentionally thin; no speculative service/repository layers are used.
+
+```text
+User (Employer) -> Jobs -> Applications <- User (Candidate)
+                         Jobs <-> Skills
+```
+
+`Job.employer` and `Application.candidate` are assigned from the authenticated request user. Skills are separate normalized records with a many-to-many relationship; comma-separated skill strings are not used.
+
+## Authentication & User Flows
+
+Both Employers and Candidates are authenticated platform users. They register, log in with email/password, and receive the same JWT token pair. Authorization then differs by role; separate `/candidate/login/` and `/employer/login/` endpoints are unnecessary because authentication is shared and authorization is role-based.
+
+Candidate flow:
+
+```text
+Register -> Login -> Browse/Search Jobs -> Apply -> View Own Applications
+```
+
+Employer flow:
+
+```text
+Register -> Login -> Create/Manage Jobs -> View Applicants -> Update Application Status
+```
+
+Registration accepts `email`, `password`, `role`, and optional names. Public API role changes are not allowed. Passwords use Django hashing and the configured built-in validators. Use `Authorization: Bearer <access-token>` for protected requests.
+
+SimpleJWT is configured with 15-minute access tokens, 7-day refresh tokens, rotation, and blacklist-after-rotation. Registration and token endpoints use dedicated lightweight throttles (`10/hour` and `20/hour` respectively).
 
 ## Setup
+
+### Docker (recommended)
+
+```bash
+git clone <repository-url>
+cd recruitment-api
+cp .env.example .env
+docker compose up --build
+```
+
+The Compose project starts PostgreSQL 16 and a web container. The web container waits for the healthy database, runs migrations, collects static files, and starts Gunicorn on port 8000. Open `http://localhost:8000`; set `WEB_PORT` in `.env` if the host port is occupied.
+
+### Local development
 
 ```powershell
 python -m venv .venv
@@ -33,54 +73,107 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-Without `POSTGRES_HOST`, settings use SQLite for a simple local/test workflow. Docker and CI configure PostgreSQL.
+If `POSTGRES_HOST` is unset, settings use SQLite for a simple local workflow. Set PostgreSQL variables in `.env` to run locally against PostgreSQL.
 
 ## Environment Variables
 
-See `.env.example` for secret key, debug/hosts, PostgreSQL, CORS, proxy, cookie, HSTS, and logging settings. Never commit real credentials.
+`.env.example` documents `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, PostgreSQL connection values, `CORS_ALLOWED_ORIGINS`, logging, proxy, cookie, SSL redirect, and HSTS settings. Development defaults are HTTP-friendly. Production deployments must use a unique secret, `DEBUG=false`, explicit hosts, HTTPS, secure cookies, and non-zero HSTS values. Never commit real credentials.
 
-## Docker Usage
+## Administrative Interface
+
+Django Unfold provides the internal admin at `/admin/`. Create a reviewer account with:
 
 ```bash
-cp .env.example .env
-docker compose up --build
+python manage.py createsuperuser
 ```
 
-The web container waits for the healthy PostgreSQL service, runs migrations, collects static files, and serves on `http://localhost:8000`.
+Staff can inspect users, jobs, skills, and applications. Soft-deleted jobs remain visible in admin through the all-records queryset, with deleted-state filters and a restore action. Job and Skill lists show related application/job counts where applicable. Application deletion is disabled to preserve recruitment history. The dashboard displays employer, candidate, job, active-job, application, status-distribution, and recent-application metrics. The REST API remains the primary interface.
 
-## Authentication
+## API Inventory
 
-Register with `POST /api/v1/auth/register/` using `email`, `password`, `role`, and optional names. Obtain tokens at `POST /api/v1/auth/token/`, refresh at `/api/v1/auth/token/refresh/`, and inspect the authenticated user at `GET /api/v1/auth/me/`. Send `Authorization: Bearer <access-token>`.
+All API routes are under `/api/v1/` unless noted.
 
-## API Endpoints
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| POST | `/auth/register/` | Public | Register Employer or Candidate |
+| POST | `/auth/token/` | Public | Email/password login; returns JWT pair |
+| POST | `/auth/token/refresh/` | Public | Rotate a refresh token |
+| GET | `/auth/me/` | Authenticated | Return current user |
+| GET | `/skills/` | Authenticated | List normalized skills |
+| POST | `/skills/` | Employer | Create a skill |
+| GET | `/jobs/` | Authenticated | List visible, non-deleted jobs |
+| POST | `/jobs/` | Employer | Create a job owned by request user |
+| GET | `/jobs/{id}/` | Authenticated | Retrieve a visible job |
+| PUT/PATCH | `/jobs/{id}/` | Owning Employer | Update own job |
+| DELETE | `/jobs/{id}/` | Owning Employer | Soft-delete own job; returns 204 |
+| GET | `/jobs/{id}/applications/` | Owning Employer | Paginated applicants for own non-deleted job |
+| GET | `/applications/` | Authenticated | Candidate’s own or employer-managed applications |
+| POST | `/applications/` | Candidate | Apply to an active, non-deleted job |
+| PATCH | `/applications/{id}/status/` | Owning Employer | Update status for own job’s application |
+| GET | `/health/` | Public | Check application and database reachability |
+| GET | `/api/schema/` | Public | OpenAPI schema |
+| GET | `/api/docs/` | Public | Swagger UI with Bearer authorization |
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/api/v1/auth/register/` | Register |
-| POST | `/api/v1/auth/token/` | Login |
-| POST | `/api/v1/auth/token/refresh/` | Rotate refresh token |
-| GET | `/api/v1/auth/me/` | Current user |
-| GET/POST | `/api/v1/skills/` | List/create skills (employer create) |
-| GET/POST | `/api/v1/jobs/` | List/create jobs |
-| GET/PATCH/DELETE | `/api/v1/jobs/{id}/` | Read/update/soft-delete a job |
-| GET | `/api/v1/jobs/{id}/applications/` | Employer's job applicants |
-| GET/POST | `/api/v1/applications/` | List own/managed applications or apply |
-| PATCH | `/api/v1/applications/{id}/status/` | Employer changes status |
-| GET | `/api/v1/health/` | Application/database health |
-| GET | `/api/schema/` and `/api/docs/` | OpenAPI and Swagger UI |
+`/skills/` is read/create only; there are no skill update/delete routes. Application deletion is intentionally not exposed.
 
 ## Search and Filtering
 
-Jobs support `search` (title/description), `location`, `skills` (skill IDs, repeatable), `employment_type`, `is_active`, `ordering` (`created_at`, `updated_at`, `title`, prefix with `-`), and page pagination.
+`GET /api/v1/jobs/` supports DRF filter backends and page-number pagination (20 items by default):
+
+```text
+/api/v1/jobs/?search=django
+/api/v1/jobs/?location=Istanbul
+/api/v1/jobs/?skills=1&skills=3
+/api/v1/jobs/?employment_type=FULL_TIME&is_active=true
+/api/v1/jobs/?ordering=-created_at
+```
+
+`search` covers title and description. Supported ordering fields are `created_at`, `updated_at`, and `title`; prefix a field with `-` for descending order. `skills` filters by skill IDs.
 
 ## Permissions and Business Rules
 
-Employers create and manage only their own jobs; candidates have read-only job access. Candidates apply only to active, non-deleted jobs and see only their applications. Employers see applications for their own jobs and can update their status. Applications are not deletable. Employer/candidate ownership fields, timestamps, role, and soft-delete fields are server controlled. Job deletion sets `deleted_at` and `is_active=False`, while public querysets hide deleted jobs.
+- Employers create jobs and can update/delete only their own jobs. Employer IDs are never accepted from client input.
+- Candidates can view/search jobs but cannot create, update, or delete them.
+- Candidates can apply only to active, non-deleted jobs. Candidate identity is always the authenticated user.
+- A candidate cannot apply to the same job twice; serializer validation provides a clear error and the database `UniqueConstraint(job, candidate)` protects against races.
+- Candidates see only their own applications. Employers see and manage applications only for their own jobs.
+- Candidates cannot change application status. Employers can set `APPLIED`, `SHORTLISTED`, `REJECTED`, or `HIRED` for applications belonging to their jobs.
+- Job ownership, candidate/employer identities, timestamps, status-at-creation, and deletion fields are server controlled.
+
+## Soft Delete and History
+
+Deleting a job performs normal REST behavior and returns HTTP 204, but internally sets `deleted_at` and `is_active=False`. Public job querysets hide deleted jobs; admin uses `Job.all_objects` so archived jobs remain inspectable and restorable. `PROTECT` foreign keys avoid silently removing referenced recruitment history. Current limitation: employer application querysets exclude applications whose jobs are soft-deleted, so archived-job applications are currently administrative-only in this assignment scope.
+
+## Security Considerations
+
+JWT authentication, password validators, role permissions, object ownership checks, queryset isolation, and server-controlled fields protect the API against common IDOR and mass-assignment mistakes. Refresh rotation and blacklisting reduce token replay. CORS is allow-list based and credentials are not enabled. Registration/login throttles are configured without adding Redis. Request IDs and structured logging are enabled; passwords, authorization headers, and JWT values are not logged. `X-Frame-Options=DENY` and content-type sniffing protection are enabled. SSL redirect, secure cookies, proxy TLS trust, and HSTS are environment controlled so local HTTP remains convenient while CI and production can enable hardened values. The health endpoint reports only status, not connection details.
+
+## Demo Data
+
+```bash
+python manage.py seed_demo
+python manage.py seed_demo --reset  # DEBUG=True only
+```
+
+The managed deterministic dataset contains:
+
+- 3 employers
+- 8 candidates
+- 27 normalized skills
+- 16 jobs
+- 28 applications
+
+It includes international locations (including several Istanbul entries), all four application statuses, active jobs, inactive jobs, and soft-deleted jobs. Demo accounts use `DemoPass123!` and are **local development-only credentials**:
+
+- Employers: `employer.istanbul@example.com`, `employer.eu@example.com`, `employer.global@example.com`
+- Candidates: `candidate1@example.com` through `candidate8@example.com`
+
+The command is safe to rerun. `--reset` is guarded by `DEBUG` and targets only curated managed demo users/jobs and exact deterministic application identities; it does not delete arbitrary records belonging to a demo candidate. Skills are reusable catalog data and are not broadly deleted.
 
 ## Testing and Quality
 
 ```bash
-pytest --cov=.
+pytest tests --cov=. --cov-report=term-missing
 ruff check .
 ruff format --check .
 python manage.py makemigrations --check --dry-run
@@ -88,28 +181,36 @@ python manage.py check
 python manage.py check --deploy
 ```
 
-The CI workflow runs all of the above against PostgreSQL.
+The current suite covers authentication, JWT behavior, throttling, health, job ownership and soft deletion, filtering, applications and duplicate protection, admin behavior, and seed idempotency/reset safety. The latest local run contains 14 tests and 93% coverage. GitHub Actions runs Ruff, migration drift checks, Django checks, the deployment security check with production-like environment values, and pytest against PostgreSQL.
 
-## Security Considerations and Design Decisions
+## Design Decisions
 
-A custom User model avoids a costly future migration and makes email the stable login identifier. Skills are separate normalized records so jobs can be filtered and indexed without comma-separated data. Duplicate applications are checked in the serializer for a friendly error and protected by a database `UniqueConstraint` for race safety. Jobs use targeted soft deletion to retain recruitment history; a generic deletion framework would add complexity without value here. Applications are immutable records from a workflow/audit perspective, so there is no public delete endpoint. Status uses `TextChoices` to keep the fixed business vocabulary explicit and validated.
+- A custom User model makes email the stable identifier and avoids a later authentication migration.
+- Email login is shared by both roles; authorization is role-based rather than duplicated into separate login APIs.
+- Skill is a normalized model so the catalog is reusable and filterable instead of comma-separated text.
+- TextChoices keeps genuinely fixed employment/status vocabularies explicit and validated.
+- Duplicate applications are checked at both serializer and database levels for usability and race safety.
+- Jobs use targeted soft deletion to preserve history without introducing a generic deletion framework.
+- Applications have no public delete operation because recruitment history should remain auditable.
+- The code uses normal Django app boundaries without speculative repository/service/infrastructure layers.
+- Multi-tenancy and SaaS billing were intentionally excluded from this assignment’s scope.
 
-Refresh rotation and blacklisting limit token replay. Authentication errors remain generic, passwords/tokens are never logged, throttles protect registration/login, CORS is allow-list based, and production security flags are environment controlled. `PROTECT` foreign keys preserve job/application history when users or jobs are referenced.
+## Future SaaS Evolution (Not Implemented)
 
-## Demo Data
+Possible future capabilities include organizations/tenants, companies and departments, tenant memberships, custom RBAC, configurable recruitment pipelines and interview stages, interview scheduling, CV/resume storage, offers, notifications and email integration, Celery with Redis/RabbitMQ, audit logs, analytics, subscription plans and billing, feature flags, webhooks, SSO, and KVKK/GDPR-oriented data lifecycle management.
 
-### Demo Data
+Future domain events could include `application_created` and `application_status_changed`. In a production SaaS, notification consumers should normally process those events asynchronously rather than sending external email inside the request-response cycle. None of these future features or placeholder event/notification modules are implemented here.
 
-Run `python manage.py seed_demo` to create a deterministic, idempotent dataset containing approximately 3 employers, 8 candidates, 16 jobs, a reusable 27-skill catalog, international locations, and 28 applications across all supported statuses. It includes active, inactive, and soft-deleted jobs and is designed to demonstrate API filtering, permissions, application workflow, admin dashboard metrics, and soft-delete behavior.
+## Repository Layout
 
-All demo accounts use the password `DemoPass123!` and are **local development only** credentials; never use them in deployment. Employer accounts are `employer.istanbul@example.com`, `employer.eu@example.com`, and `employer.global@example.com`. Candidate accounts are `candidate1@example.com` through `candidate8@example.com`.
-
-The command can be rerun safely. For a development-only reset of these known demo records, use `python manage.py seed_demo --reset`; reset is refused when `DEBUG=False`.
-
-## Administrative Interface
-
-The internal Django admin uses Django Unfold for a restrained, domain-specific operational experience. The REST API remains the primary assignment interface; the admin is intended for reviewer and operations convenience. Staff users can inspect users, jobs, applications, skills, and soft-deleted jobs. Privileged admins can restore soft-deleted jobs from the Job changelist. Application history is intentionally preserved, so Application deletion is disabled in admin.
-
-## Future SaaS Evolution
-
-This assignment intentionally does not implement organizations/tenants, companies/departments, memberships, custom roles, pipelines/stages, interview scheduling, CV storage, offers, notifications, email integration, Celery jobs, audit logs, analytics, subscriptions/billing, feature flags, webhooks, SSO, or KVKK/GDPR lifecycle tooling. A later SaaS version could add an Organization and membership boundary first, then tenant-scoped querysets, configurable pipelines/interviews, storage and asynchronous integrations. Domain events such as `application_created` and `application_status_changed` could feed a Celery-backed notification worker; external email should normally be sent asynchronously outside the request-response cycle. These are documented evolution paths, not unused placeholder code in this project.
+```text
+config/                  Django settings, URLs, ASGI/WSGI
+accounts/                Custom User, auth serializers/views/admin
+jobs/                    Job, Skill, filters, permissions, seed command/admin
+applications/            Application model, serializers, views/admin
+common/                  health endpoint, request IDs, logging, dashboard
+tests/                   pytest suite and shared fixtures
+.github/workflows/ci.yml CI checks with PostgreSQL service
+Dockerfile               Gunicorn container image
+docker-compose.yml       PostgreSQL + web development stack
+```
