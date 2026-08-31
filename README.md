@@ -98,7 +98,13 @@ Refresh rotation and blacklisting limit token replay. Authentication errors rema
 
 ## Demo Data
 
-`python manage.py seed_demo` creates employer/candidate accounts (`employer@example.com`, `candidate@example.com`, password `DemoPassword123!`), skills, and several jobs. It is safe to rerun for the same demo records.
+### Demo Data
+
+Run `python manage.py seed_demo` to create a deterministic, idempotent dataset containing approximately 3 employers, 8 candidates, 16 jobs, a reusable 27-skill catalog, international locations, and 28 applications across all supported statuses. It includes active, inactive, and soft-deleted jobs and is designed to demonstrate API filtering, permissions, application workflow, admin dashboard metrics, and soft-delete behavior.
+
+All demo accounts use the password `DemoPass123!` and are **local development only** credentials; never use them in deployment. Employer accounts are `employer.istanbul@example.com`, `employer.eu@example.com`, and `employer.global@example.com`. Candidate accounts are `candidate1@example.com` through `candidate8@example.com`.
+
+The command can be rerun safely. For a development-only reset of these known demo records, use `python manage.py seed_demo --reset`; reset is refused when `DEBUG=False`.
 
 ## Administrative Interface
 

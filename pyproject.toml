@@ -7,6 +7,9 @@ exclude = ["*/migrations/*"]
 select = ["E", "F", "I", "UP", "B", "DJ"]
 ignore = ["DJ001"]
 
+[tool.ruff.lint.per-file-ignores]
+# Curated job descriptions intentionally remain readable as single data values.
+"jobs/management/commands/seed_demo.py" = ["E501"]
+
 [tool.ruff.format]
 quote-style = "double"
-
