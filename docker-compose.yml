@@ -18,11 +18,10 @@ services:
     environment:
       POSTGRES_HOST: db
     ports:
-      - "8000:8000"
+      - "${WEB_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   postgres_data:
-
