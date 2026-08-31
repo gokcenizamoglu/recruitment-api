@@ -6,4 +6,4 @@ __pycache__
 *.py[cod]
 db.sqlite3
 .env
-
+private_media

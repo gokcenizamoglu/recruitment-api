@@ -9,6 +9,7 @@ __pycache__/
 htmlcov/
 staticfiles/
 media/
+private_media/
 .idea/
 .vscode/
 .DS_Store

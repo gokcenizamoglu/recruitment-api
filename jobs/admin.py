@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.db.models import Count
 from unfold.admin import ModelAdmin
 
-from jobs.models import Job, Skill
+from jobs.models import ApplicationQuestion, Job, Skill
 
 
 class DeletedStateFilter(admin.SimpleListFilter):
@@ -81,3 +81,28 @@ class SkillAdmin(ModelAdmin):
     @admin.display(description="Jobs", ordering="_job_count")
     def job_count(self, obj):
         return obj._job_count
+
+
+@admin.register(ApplicationQuestion)
+class ApplicationQuestionAdmin(ModelAdmin):
+    list_display = (
+        "text",
+        "job",
+        "employer",
+        "question_type",
+        "required",
+        "is_active",
+        "order",
+    )
+    list_filter = ("question_type", "required", "is_active")
+    search_fields = ("text", "job__title", "job__employer__email")
+    autocomplete_fields = ("job",)
+    list_select_related = ("job", "job__employer")
+    ordering = ("job", "order", "id")
+
+    @admin.display(description="Employer", ordering="job__employer__email")
+    def employer(self, obj):
+        return obj.job.employer
+
+    def has_delete_permission(self, request, obj=None):
+        return False

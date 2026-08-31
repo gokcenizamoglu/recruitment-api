@@ -19,7 +19,7 @@ jobs:
           --health-cmd="pg_isready -U recruitment -d recruitment"
           --health-interval=10s --health-timeout=5s --health-retries=5
     env:
-      SECRET_KEY: ci-secret
+      SECRET_KEY: ci-only-test-key-2026-a7F9qP2vR8mK4xT6zN3hW5eY1cU0-long-placeholder
       DEBUG: "false"
       POSTGRES_HOST: localhost
       POSTGRES_DB: recruitment

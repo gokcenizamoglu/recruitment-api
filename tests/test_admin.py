@@ -5,11 +5,11 @@ from django.test import Client, RequestFactory
 from django.utils import timezone
 
 from accounts.models import User
-from applications.admin import ApplicationAdmin
-from applications.models import Application
+from applications.admin import ApplicationAdmin, ApplicationAnswerAdmin
+from applications.models import Application, ApplicationAnswer
 from common.admin import dashboard_callback
-from jobs.admin import JobAdmin
-from jobs.models import Job
+from jobs.admin import ApplicationQuestionAdmin, JobAdmin
+from jobs.models import ApplicationQuestion, Job
 
 
 @pytest.mark.django_db
@@ -59,3 +59,31 @@ def test_unfold_admin_dashboard_renders():
     response = client.get("/admin/")
     assert response.status_code == 200
     assert b"Recruitment Administration" in response.content
+
+
+@pytest.mark.django_db
+def test_extension_admin_is_read_only_and_resume_link_is_protected(candidate, job):
+    question = ApplicationQuestion.objects.create(
+        job=job, text="Question", question_type=ApplicationQuestion.QuestionType.TEXT
+    )
+    application = Application.objects.create(candidate=candidate, job=job)
+    answer = ApplicationAnswer.objects.create(
+        application=application,
+        question=question,
+        question_text_snapshot=question.text,
+        question_type_snapshot=question.question_type,
+        value="Answer",
+    )
+    request = RequestFactory().get("/admin/")
+    request.user = candidate
+
+    answer_admin = ApplicationAnswerAdmin(ApplicationAnswer, admin.site)
+    assert answer_admin.has_add_permission(request) is False
+    assert answer_admin.has_delete_permission(request, answer) is False
+
+    question_admin = ApplicationQuestionAdmin(ApplicationQuestion, admin.site)
+    assert question_admin.has_delete_permission(request, question) is False
+
+    application_admin = ApplicationAdmin(Application, admin.site)
+    assert application_admin.resume_present(application) is False
+    assert application_admin.resume_download(application) == "No resume submitted"

@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from applications.serializers import ApplicationSerializer
+from applications.serializers import ApplicationReadSerializer
 from jobs.filters import JobFilter
 from jobs.models import Job, Skill
 from jobs.permissions import IsEmployer, IsEmployerOrReadOnly, IsJobOwnerOrReadOnly
@@ -42,13 +42,15 @@ class JobViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance.soft_delete()
 
-    @extend_schema(responses=ApplicationSerializer(many=True))
+    @extend_schema(responses=ApplicationReadSerializer(many=True))
     @action(detail=True, methods=["get"], permission_classes=[IsEmployer])
     def applications(self, request, pk=None):
         job = self.get_object()
         if job.employer_id != request.user.id:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        queryset = job.applications.select_related("candidate", "job").all()
+        queryset = job.applications.select_related("candidate", "job").prefetch_related("answers")
         page = self.paginate_queryset(queryset)
-        serializer = ApplicationSerializer(page, many=True)
+        serializer = ApplicationReadSerializer(
+            page, many=True, context=self.get_serializer_context()
+        )
         return self.get_paginated_response(serializer.data)

@@ -19,9 +19,12 @@ services:
       POSTGRES_HOST: db
     ports:
       - "${WEB_PORT:-8000}:8000"
+    volumes:
+      - private_media:/app/private_media
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  private_media:
