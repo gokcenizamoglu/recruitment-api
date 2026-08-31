@@ -49,4 +49,5 @@ jobs:
           SECURE_HSTS_PRELOAD: "true"
           TRUST_PROXY_SSL_HEADER: "true"
         run: python manage.py check --deploy
+      - run: python manage.py collectstatic --noinput
       - run: pytest --cov=. --cov-report=term-missing

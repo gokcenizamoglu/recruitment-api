@@ -183,13 +183,16 @@ def test_resume_download_is_owner_scoped_and_survives_soft_delete(
     assert auth(APIClient(), other_candidate).get(url).status_code == 404
     assert auth(APIClient(), employer2).get(url).status_code == 404
     candidate_response = auth(APIClient(), candidate).get(url)
-    assert candidate_response.status_code == 200
-    candidate_response.close()
-
-    job.soft_delete()
-    employer_response = auth(APIClient(), employer).get(url)
-    assert employer_response.status_code == 200
-    employer_response.close()
+    employer_response = None
+    try:
+        assert candidate_response.status_code == 200
+        job.soft_delete()
+        employer_response = auth(APIClient(), employer).get(url)
+        assert employer_response.status_code == 200
+    finally:
+        if employer_response is not None:
+            employer_response.close()
+        candidate_response.close()
 
 
 @pytest.mark.django_db
