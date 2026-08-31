@@ -1,0 +1,38 @@
+{% extends "admin/index.html" %}
+{% load i18n unfold %}
+
+{% block content %}
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 mb-8">
+    {% for label, value in recruitment_metrics.items %}
+      {% component "unfold/components/card.html" with title=label|title %}
+        <div class="text-3xl font-semibold">{{ value }}</div>
+      {% endcomponent %}
+    {% endfor %}
+  </div>
+
+  {% component "unfold/components/card.html" with title="Application status" %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr><th class="text-left py-2">Status</th><th class="text-left py-2">Count</th></tr></thead>
+        <tbody>
+          {% for item in application_status_counts %}
+            <tr><td class="py-2">{{ item.status|title }}</td><td class="py-2">{{ item.total }}</td></tr>
+          {% empty %}<tr><td colspan="2" class="py-2">No applications yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endcomponent %}
+
+  {% component "unfold/components/card.html" with title="Recent applications" %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr><th class="text-left py-2">Candidate</th><th class="text-left py-2">Job</th><th class="text-left py-2">Status</th></tr></thead>
+        <tbody>
+          {% for application in recent_applications %}
+            <tr><td class="py-2">{{ application.candidate.email }}</td><td class="py-2">{{ application.job.title }}</td><td class="py-2">{{ application.get_status_display }}</td></tr>
+          {% empty %}<tr><td colspan="3" class="py-2">No applications yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endcomponent %}
+{% endblock %}

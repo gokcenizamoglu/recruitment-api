@@ -100,7 +100,10 @@ Refresh rotation and blacklisting limit token replay. Authentication errors rema
 
 `python manage.py seed_demo` creates employer/candidate accounts (`employer@example.com`, `candidate@example.com`, password `DemoPassword123!`), skills, and several jobs. It is safe to rerun for the same demo records.
 
+## Administrative Interface
+
+The internal Django admin uses Django Unfold for a restrained, domain-specific operational experience. The REST API remains the primary assignment interface; the admin is intended for reviewer and operations convenience. Staff users can inspect users, jobs, applications, skills, and soft-deleted jobs. Privileged admins can restore soft-deleted jobs from the Job changelist. Application history is intentionally preserved, so Application deletion is disabled in admin.
+
 ## Future SaaS Evolution
 
 This assignment intentionally does not implement organizations/tenants, companies/departments, memberships, custom roles, pipelines/stages, interview scheduling, CV storage, offers, notifications, email integration, Celery jobs, audit logs, analytics, subscriptions/billing, feature flags, webhooks, SSO, or KVKK/GDPR lifecycle tooling. A later SaaS version could add an Organization and membership boundary first, then tenant-scoped querysets, configurable pipelines/interviews, storage and asynchronous integrations. Domain events such as `application_created` and `application_status_changed` could feed a Celery-backed notification worker; external email should normally be sent asynchronously outside the request-response cycle. These are documented evolution paths, not unused placeholder code in this project.
-

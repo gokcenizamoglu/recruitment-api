@@ -21,6 +21,7 @@ DEBUG = env_bool("DEBUG", True)
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
 
 INSTALLED_APPS = [
+    "unfold",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -53,7 +54,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -64,6 +65,17 @@ TEMPLATES = [
         },
     }
 ]
+
+UNFOLD = {
+    "SITE_TITLE": "Recruitment Administration",
+    "SITE_HEADER": "Recruitment Administration",
+    "SITE_SUBHEADER": "Internal recruitment management",
+    "SITE_URL": "/",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "SIDEBAR": {"show_search": True, "show_all_applications": False},
+    "DASHBOARD_CALLBACK": "common.admin.dashboard_callback",
+}
 WSGI_APPLICATION = "config.wsgi.application"
 
 if os.getenv("POSTGRES_HOST"):
